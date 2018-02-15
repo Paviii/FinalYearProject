@@ -1,9 +1,9 @@
 
 chunkSize = [25 25];
-thresh = 0.001;
+thresh = 0.01;
 
 %image 
-picture = imread('image.jpg');
+picture = imread('test_data/image.jpg');
 pictureGrayScale = im2double(rgb2gray(picture)); 
 
 %do chunks before DFT
@@ -13,7 +13,7 @@ imageChunks = createChunksV2(pictureGrayScale,chunkSize);
 dctpicture = zeros(size(imageChunks));
 numOfChunks = size(imageChunks,3);
 for iDCT = 1 : numOfChunks
-     dctpicture(:,:,iDCT) =  dct2(imageChunks(:,:,iDCT));        
+     dctpicture(:,:,iDCT) =  dct2(imageChunks(:,:,iDCT));
 end
 
 %vectorize dct components and subtract mean
@@ -26,20 +26,21 @@ for iVec = 1 : chunkSize(1)
         meanMat(iVec,jVec) = mean(vecTmp);
         varMat(iVec,jVec) = var(vecTmp);
         
-        dctVec(:,(iVec-1)*chunkSize(2) + jVec) = vecTmp - meanMat(iVec,jVec);
+        dctVec(:,(iVec-1)*chunkSize(2) + jVec) = vecTmp;% - meanMat(iVec,jVec);
     end
-end       
+end
 
 %remove near-zero coefficients
 dctVecSpar = dctVec;
 dctVecSpar(abs(dctVec) < thresh) = 0;
 
 
-
 %multiple by random matrix
-K = 20;
+
+K = 81;
 A = randn(K,size(dctVecSpar,1));
 compSenVec = A*dctVecSpar;
+
 
 %power allocation and transmit vector
 txVec = zeros(numel(compSenVec),1);
@@ -64,22 +65,30 @@ numOfChunksRx = prod(metadata.picSize./chunkSizeRx);
 
 
 %extimate X using MMSE
+noisVar = 0.001;
+y = compSenVec + sqrt(noisVar)*randn(size(compSenVec));
 
-y = compSenVec(:,1);
 
-noisVar = 0;
 Cn = diag(noisVar*ones(1,K));
-Cx = diag(metadata.varMat(1,1)*ones(1,numOfChunksRx));
-estX = Cx*A'*inv(A*Cx*A' + Cn)*y;
+crsCov = xcov(dctVecSpar(:,1));
+Cx = diag(crsCov(1:numOfChunksRx));
+estX = A'*inv(A*A' + Cn)*y;
 
 
-vidRetr = mirt_idctn(estX) + metadata.frameMean;
+rxBlock = zeros(chunkSizeRx(1),chunkSizeRx(2),numOfChunksRx);
 
-figure;
-currAxes = axes;
-for iFrame = 1 : numOfFrames   
-    image(vidRetr(:,:,:,iFrame), 'Parent', currAxes);
-    pause(1/v.FrameRate);
+for iChunk = 1 : numOfChunksRx
+   rxBlock(:,:,iChunk) = idct2(reshape(estX(iChunk,:),[chunkSizeRx(1) chunkSizeRx(2)])');% + metadata.meanMat);
 end
 
-psnr(vidRetr,vidFrames)
+rxPic = zeros(metadata.picSize);
+dimOfChunk = metadata.picSize./chunkSizeRx;
+for iChunk = 1 : dimOfChunk(1)
+    for jChunk = 1 : dimOfChunk(2)
+        rxPic((iChunk-1)*chunkSize(1) + 1 : (iChunk-1)*chunkSize(1)+chunkSize(1), ...
+            (jChunk-1)*chunkSize(2)+1:(jChunk-1)*chunkSize(2)+chunkSize(2))= ...
+            rxBlock(:,:,(iChunk-1)*dimOfChunk(2) + jChunk);
+    end
+end
+
+figure; imshow(rxPic);
