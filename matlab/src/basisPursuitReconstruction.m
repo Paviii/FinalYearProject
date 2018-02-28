@@ -9,8 +9,8 @@ for iVec = 1 : numOfVecs
     s2 = pinv(Atmp)*yVec;
     
     %___BP SOLUTION___
-    s1 = l1eq_pd(s2,Atmp,Atmp',yVec,5e-3,length(yVec)); % L1-magic toolbox
-    %x = l1eq_pd(y,A,A',b,5e-3,32);
+    s1 = l1eq_pd(s2,Atmp,Atmp',yVec,1e-4,100); % L1-magic toolbox
+    
     
     sOut(:,iVec) = s1;
     

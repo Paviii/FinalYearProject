@@ -1,13 +1,15 @@
 %% TX
 
 rxOption = 1; %1 - AMP, 2 - basis pursuit, 3 - MMSE
-chunkSize = [25 25];
+chunkSize = [10 10];
 thresh = 0.01;
 
 
 %image
-picture = imread('test_data/image.jpg');
+picture = imread('test_data/boy.png');
 pictureGrayScale = im2double(rgb2gray(picture));
+figure; subplot(1,4,1); title('original');
+imshow(pictureGrayScale);
 
 
 %do chunks before DFT
@@ -56,7 +58,9 @@ A{4} = randn(edges(5),numOfChunks);
 
 compSenVec = {};
 Aind = zeros(1,numOfVecs);
+numOfNonZero = zeros(1,numOfVecs);
 for i = 1: numOfVecs
+    numOfNonZero(i) = nnz(dctVecSpar(:,i));
     Aind(i) = discretize(nnz(dctVecSpar(:,i)),edges);
     Amult = A{Aind(i)};
     compSenVec{i} = Amult*dctVecSpar(:,i);
@@ -81,7 +85,7 @@ metadata.Aind = Aind;
 %% Rx
 
 %channel
-SNR = [0 : 30];
+SNR = 50;% [20:50];
 psnrRes = zeros(length(SNR),3);
 
 
@@ -90,7 +94,7 @@ chunkSizeRx = size(metadata.meanMat);
 numOfChunksRx = prod(metadata.picSize./chunkSizeRx);
 numOfVecsRx = prod(chunkSizeRx);
 
-parfor iSNR = 1 : length(SNR)
+for iSNR = 1 : length(SNR)
     
     noisVar = 10^(-SNR(iSNR)/10);
     y = {};
@@ -100,19 +104,33 @@ parfor iSNR = 1 : length(SNR)
     
     %power scaling is bypassed for now
     
-    for iRx = 1:3
+    for iRx = 1
         
         switch iRx
             case 1
                 %AMP estimator
-                estX = AMPReconstruction(y,A,metadata.Aind,numOfVecsRx,metadata.varMat);
+                estX = AMPReconstruction(y,A,metadata.Aind,numOfVecsRx,metadata.varMat);             
                 
             case 2
                 %basis pursuit estimator
                 estX = basisPursuitReconstruction(y,A,metadata.Aind,numOfVecsRx );
+                
+            case 3
+                %subspace pursuit estimator
+                estX = SubspacePursuitReconstruction(y,A,metadata.Aind,numOfVecsRx);
+                
+            case 4                
+                % OMP estimator
+                estX = OMPReconstruction(y,A,metadata.Aind,numOfVecsRx);
+                
+            case 5
+                %CoSamp reconstruction
+                estX = CoSampReconstruction(y,A,metadata.Aind,numOfVecsRx);
+                
             otherwise
                 %extimate X using MMSE
                 estX =  MMSEReconstruction(y,A,metadata.Aind,numOfVecsRx,noisVar);
+                
         end
         
         rxBlock = zeros(chunkSizeRx(1),chunkSizeRx(2),numOfChunksRx);
@@ -129,7 +147,7 @@ parfor iSNR = 1 : length(SNR)
                     rxBlock(:,:,(iChunk-1)*dimOfChunk(2) + jChunk);
             end
         end
-        
+        imshow(rxPic);
         
         psnrRes(iSNR,iRx) = psnr(rxPic,pictureGrayScale);
     end
@@ -137,7 +155,8 @@ end
 
 figure; plot(SNR,psnrRes(:,1),'-x',SNR,psnrRes(:,2),'-x',SNR,psnrRes(:,3),'-x');
 grid on; xlabel('SNR (dB)'); ylabel('PSNR (dB)');
-legend('AMP','basis pursuit','MMSE');
+legend('subspace pursuit','OMP','CoSamp');
+%legend('AMP','basis pursuit','MMSE');
 % figure;
 % subplot(1,2,1);
 % imshow(pictureGrayScale); title('original');
