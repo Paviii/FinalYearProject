@@ -13,11 +13,13 @@ for iVec = 1 : numOfVecs
     Atmp = A{Aind(iVec)};
     sparseRat = size(Atmp,1)/size(A{end},2);    
     
-    inputEst0 = AwgnEstimIn(0, varVec(1));
+    inputEst0 = AwgnEstimIn(0, varVec(iVec));
     inputEst = SparseScaEstim( inputEst0, sparseRat );
-    
-
-   [estFin] = ampEst(inputEst, yVec, Atmp);
+    opt = AmpOpt();
+    opt.tol = 1e-4;
+    opt.nit = 1000;
+    optA.rvarMethod = 'wvar'; optA.wvar = varVec(iVec);
+    [estFin] = ampEst(inputEst, yVec, Atmp, opt);
     
     sOut(:,iVec) = estFin.xhat;
     

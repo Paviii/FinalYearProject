@@ -19,7 +19,7 @@ T = [];
 while (t <= maxiterations) && (norm(v)/norm(u) > tol)
   y = abs(Phi'*v);
   [vals,z] = sort(y,'descend');
-  Omega = find(y >= vals(2*K) & y > numericalprecision);
+  Omega = find( y > numericalprecision);
   T = union(Omega,T);
   b = pinv(Phi(:,T))*u;
   [vals,z] = sort(abs(b),'descend');

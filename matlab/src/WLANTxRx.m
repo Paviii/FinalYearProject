@@ -51,7 +51,9 @@ txWaveform = [txWaveform;zeros(10,1)];
 chanOut = tgacChannel(txWaveform);
 
 %snr = 19; % In dBs
-rxWaveform = awgn(chanOut,snr,0);
+%rxWaveform = awgn(chanOut,snr,0);
+noisVar = 10^(-snr/10);
+rxWaveform = txWaveform + sqrt(noisVar/2)*(randn(size(chanOut)) + 1i*randn(size(chanOut)));
 
 % Display the spectrum of the transmitted and received signals. The
 % received signal spectrum is affected by the channel

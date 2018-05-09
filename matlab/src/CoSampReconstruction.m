@@ -1,4 +1,4 @@
-function sOut = AMPReconstruction(y,A,Aind,numOfVecs,varMat)
+function sOut = CoSampReconstruction(y,A,Aind,numOfVecs)
 
 numOfChunks = size(A{end},2);
 sOut = zeros(numOfChunks,numOfVecs);
