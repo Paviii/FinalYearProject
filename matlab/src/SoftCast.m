@@ -9,7 +9,7 @@ dctpicture = dct2(pictureGrayScaleNorm);
 
 %chunks
 thresh = 0.00001;
-chunkSize = [15 15];
+chunkSize = [9 9];
 iSize = size(dctpicture,1)/chunkSize(1);
 jSize = size(dctpicture,2)/chunkSize(2);
 pictureChunks = zeros(iSize,jSize);
@@ -68,7 +68,7 @@ PRx = P; %fixed
 
 %add noise
 SNRVec = [0 : 50];
-SNRVec = 100; 
+%SNRVec = 100; 
 psnrVec = zeros(size(SNRVec));
 for iSNR =  1 :  length(SNRVec)
     noisVar = 10^(-SNRVec(iSNR)/10);

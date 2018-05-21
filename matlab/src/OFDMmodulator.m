@@ -3,17 +3,33 @@ function Y  = OFDMmodulator(data)
 
 %number of data subcarriers 
 numOfSubCar = 53;
-
-%create vector of data
-dataVec = vertcat(data{:});
-dataVecCompl = [dataVec(1:end/2) + 1i*dataVec(end/2+1:end)];
+numOfChannelSymbols = ceil(length(data)/numOfSubCar);
 
 H = comm.OFDMModulator;
-H.NumSymbols = ceil(length(dataVecCompl)/numOfSubCar);
-%append zeros
-dataVecExt = reshape([dataVecCompl; zeros(H.NumSymbols*numOfSubCar-length(dataVecCompl),1)],[numOfSubCar H.NumSymbols]) ;
 
-Y = step(H,dataVecExt);
+Y = {};
+for iChannSymb = 1 : numOfChannelSymbols
+    dataInd = (iChannSymb-1)*numOfSubCar + 1 : min((iChannSymb-1)*numOfSubCar + 53,length(data));
+    vecLen = max(cellfun(@(x) numel(x),data(dataInd)));
+    
+    H.NumSymbols = ceil(vecLen/2);
+    
+    dataMat = zeros(numOfSubCar,H.NumSymbols);
+    dataTmp = data(dataInd);
+    
+    for iSubCar =  1 : length(dataInd)
+        vecTmp = dataTmp{iSubCar};
+        %add zero if not even
+        if bitget(length(vecTmp),1)
+            vecTmp = [vecTmp; 0];
+        end
+        dataMat(iSubCar,1:ceil(length(vecTmp)/2)) = vecTmp(1:end/2) + 1i*vecTmp(end/2+1:end);
+    end
+    
+    Y{iChannSymb} = step(H,dataMat);
+    H.release();
+end
+
 
 end
 
