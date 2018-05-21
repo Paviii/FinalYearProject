@@ -1,0 +1,3 @@
+[submodule "matlab/sdruOFDM"]
+	path = matlab/sdruOFDM
+	url = https://github.com/WiLab/sdruOFDM
