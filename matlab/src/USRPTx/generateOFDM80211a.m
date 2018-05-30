@@ -59,14 +59,15 @@ tx.originalData = OFDMletters2bits(payloadMessage);
 tx.originalData = reshape(tx.originalData.',size(tx.originalData,1)*size(tx.originalData,2),1);
 
 % Generate CRC
-hGen = comm.CRCGenerator([1 0 0 1], 'ChecksumsPerFrame',1);
-dataWithCRC = step(hGen, tx.originalData);% Add CRC
+% no CRC
+%hGen = comm.CRCGenerator([1 0 0 1], 'ChecksumsPerFrame',1);
+%dataWithCRC = step(hGen, tx.originalData);% Add CRC
 
 % Construct modulator for each subcarrier
 hMod = comm.BPSKModulator; % BPSK
 
 % Apply modulator for each subcarrier
-modData = step(hMod, dataWithCRC);
+modData = step(hMod, tx.originalData);
 
 % Pad IFFT
 tx.padBits = tx.numCarriers - mod(length(modData),tx.numCarriers);

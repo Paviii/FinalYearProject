@@ -4,11 +4,11 @@ compileIt = 0;
 
 bw = 20e6; %20MHz
 numFrames = 1;
-payloadMessage = 'Andreeeeeeei!!!!';
-numOfPackets = 1000;
+payloadMessage = 'Andreeeeeeei!!!! is the greatest businessman on the planet';
+numOfPackets = 10000;
 InterpolationFactor = 4;
 %generate waveform
-[ txWaveform, txConfig ] = generateOFDM80211a(numFrames,payloadMessage);
+[txWaveform, txConfig ] = generateOFDM80211a(numFrames,payloadMessage);
 
 %interpolate
 rateConverter = dsp.FIRRateConverter('InterpolationFactor', 5,... 
