@@ -65,19 +65,21 @@ coder.internal.errorIf(size(rxNonHTData, 1) < minInputLen, 'wlan:wlanNonHTDataRe
 [ofdmDemodData, ofdmDemodPilots] = wlan.internal.wlanOFDMDemodulate(rxNonHTData(1:minInputLen, :), cfgOFDM, symOffset);
 %Construct demodulator
 %
-% CyclicPrefixLength = 16;
-% FFTLength = 64;
-% PilotCarrierIndices = cfgOFDM.PilotIndices;
-% hDataDeMod = comm.OFDMDemodulator(...
-%     'CyclicPrefixLength',   CyclicPrefixLength,...
-%     'FFTLength' ,           FFTLength,...
-%     'NumGuardBandCarriers', [6; 5],...
-%     'NumSymbols',           numOFDMSym,...    
-%     'PilotOutputPort',       true,...
-%     'PilotCarrierIndices',  PilotCarrierIndices,...    
-%     'RemoveDCCarrier',      true);
-% 
-% [ofdmDemodData, ofdmDemodPilots] = step(hDataDeMod, rxNonHTData);
+CyclicPrefixLength = 16;
+FFTLength = 64;
+NumGuardBandCarriers = [6 ; 5];
+PilotCarrierIndices = [12;26;40;54];
+hDataDeMod = comm.OFDMDemodulator(...
+    'CyclicPrefixLength',   CyclicPrefixLength,...
+    'FFTLength' ,           FFTLength,...
+    'NumGuardBandCarriers', NumGuardBandCarriers,...
+    'NumSymbols',            numOFDMSym,...    
+    'PilotOutputPort',       true,...
+    'PilotCarrierIndices',  PilotCarrierIndices,...    
+    'RemoveDCCarrier',      true);
+
+[ofdmDemodData, ofdmDemodPilots] = step(hDataDeMod, rxNonHTData);
+release(hDataDeMod);
 
 % Pilot phase tracking
 if calculateCPE==true || strcmp(pilotPhaseTracking, 'PreEQ')
@@ -98,15 +100,12 @@ end
 % Equalization method
 [eqDataSym, csiData] = wlan.internal.wlanEqualize(ofdmDemodData, chanEstData, eqMethod, noiseVarEst);
 
-
-
-
+%eqDataSym = ofdmDemodData;
 
 %demodulating with BPSK
-eqDataSym = reshape(ofdmDemodData,numel(eqDataSym), []);
+eqDataSym = reshape(ofdmDemodData.',numel(eqDataSym), []);
 bpskDemod = comm.BPSKDemodulator; % BPSK
 bits = step(bpskDemod,eqDataSym); % output
 
-%release(hDataDeMod);
 
 end

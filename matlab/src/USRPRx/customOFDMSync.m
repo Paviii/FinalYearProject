@@ -8,6 +8,7 @@ properties (Nontunable)
     ChannelBandwidth = 'CBW20';
     SymbolTimingThreshold = 1;
     OFDMSymbolOffset = .75;
+    numOfDataSymbols = 100;
 end
 
 properties (Access = private, Nontunable)
@@ -70,6 +71,14 @@ methods
     obj.(prop) = val;
   end
   
+  function set.numOfDataSymbols(obj, val)
+    prop = 'numOfDataSymbols';
+    validateattributes(val, {'double'}, ...
+        {'real','scalar','>=',0}, ...
+        [class(obj) '.' prop], prop);
+    obj.(prop) = val;
+  end
+  
 end
 
 methods (Access = protected)
@@ -82,7 +91,7 @@ methods (Access = protected)
     obj.pSymbolLen = 4*Rs/1e6;
 
     % Instantiate objects
-    obj.pAGC = comm.AGC;
+    obj.pAGC = comm.AGC('AveragingLength',obj.numOfDataSymbols);
 
     obj.pCoarseFreqCompensator = comm.PhaseFrequencyOffset( ...
         'FrequencyOffsetSource', 'Input port', ...
@@ -131,7 +140,7 @@ methods (Access = protected)
     reset(obj.pSyncSymbolBuffer);
   end
   
-  function [validPacket, cfgSig, rxData, chanEst, noiseVarEst, data] = stepImpl(obj, x, numOfSym)    
+  function [validPacket, cfgSig, rxData, chanEst, noiseVarEst, data] = stepImpl(obj, x)    
     % Output initialization
     validPacket = false;
     cfgSig    = obj.pCfgNonHT;
@@ -152,8 +161,8 @@ methods (Access = protected)
         obj.pLSTFSearchBuffer = [obj.pLSTFSearchBuffer(symLen+1:end); data];
         
         if ~obj.pPacketDetected % Packet Detect
-            pktOffset = wlanPacketDetect(obj.pLSTFSearchBuffer, chanBW,0,0.9);
-            %pktOffset = locateOFDMFrame_sdr( 64, obj.shortPreambleOFDM, obj.pLSTFSearchBuffer);
+            pktOffset = wlanPacketDetect(obj.pLSTFSearchBuffer + 0.01*(randn(160,1) + 1i*randn(160,1)), chanBW,0,0.9);
+            %pktOffset = locateOFDMFrame_sdr( 64, obj.pLSTFSearchBuffer);
             
             if ~isempty(pktOffset) && (pktOffset(1) <= symLen)
                 % Estimate CFO when more than one L-STF symbol in buffer
@@ -258,7 +267,7 @@ methods (Access = protected)
                     % PSDU buffering
                     % Keep buffering payload
                     
-                    obj.pNumDataSymbols = numOfSym;
+                    obj.pNumDataSymbols = obj.numOfDataSymbols;
                     obj.pCfgNonHT.PSDULength = obj.pNumDataSymbols;
                     obj.pNumCollectedDataSym = obj.pNumCollectedDataSym + 1;
                     obj.pFullPayload((obj.pNumCollectedDataSym-1)*symLen+(1:symLen), :) = syncedSym(1:symLen, :);                   

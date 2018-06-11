@@ -23,11 +23,11 @@ for iDCT = 1 : numOfChunks
 end
 
 
-%vectorize dct components 
+%vectorize dct components
 dctVec = zeros(numOfChunks,prod(chunkSize));
 for iVec = 1 : chunkSize(1)
     for jVec = 1 : chunkSize(2)
-        vecTmp = dctpicture(iVec,jVec,:);                
+        vecTmp = dctpicture(iVec,jVec,:);
         dctVec(:,(iVec-1)*chunkSize(2) + jVec) = vecTmp;
     end
 end
@@ -46,7 +46,7 @@ for i = 1 : numOfVecs
     varMat(i) = var(nonzeros(dctVecSpar(:,i))); %variance of non-zero terms
     nnzInd = dctVecSpar(:,i) ~= 0;
     sparsityPattern{i} = find(dctVecSpar(:,i) == 0 );
-    dctVecSpar(nnzInd,i) = dctVecSpar(nnzInd,i) - meanMat(i);    
+    dctVecSpar(nnzInd,i) = dctVecSpar(nnzInd,i) - meanMat(i);
 end
 
 %multiple by random matrix
@@ -73,15 +73,6 @@ for i = 1: numOfVecs
     compSenVec{i} = Amult*dctVecSpar(:,i);
 end
 
-%metadata sent over reliable channel
-metadata.picSize = [size(picture,1) size(picture,2)];
-metadata.chunkSize = chunkSize;
-metadata.meanMat = meanMat;
-metadata.varMat = varMat;
-metadata.Aind = Aind;
-metadata.dataLength = sum(cellfun('length',compSenVec));
-metadata.sparsity = numOfNonZero/numOfChunks;
-
 
 %power allocation no feedback
 % P = 1;
@@ -96,59 +87,74 @@ metadata.sparsity = numOfNonZero/numOfChunks;
 
 %channel
 SNR =  [0:50];
-%SNR = 100;
+SNR = 100;
 psnrRes = zeros(length(SNR),3);
 for iSNR = 1 : length(SNR)
     noisVar = 10^(-SNR(iSNR)/10);
-
-%power allocation with feedback
-P = 1;
-n = noisVar*ones(1,numOfVecs);
-gamma = (sum(varMat.*n)/(P + sum(n)))^2;
-powAlocCell = cell(numOfVecs,1);
-g = zeros(numOfVecs,1);
-for i = 1 : numOfVecs
-     lambda = varMat(i);
-     g(i) = sqrt((sqrt(lambda*n(i)/gamma) - n(i))/lambda);
-     powAlocCell{i} = g(i)*compSenVec{i};
-end
-
-%create IQ format with power allocation 
-y = OFDMmodulator(powAlocCell);
-
-
-%% Rx
-
-
-
-%data for Rx
-chunkSizeRx = metadata.chunkSize;
-numOfChunksRx = prod(metadata.picSize./chunkSizeRx);
-numOfVecsRx = prod(chunkSizeRx);
-
-
     
-    
-    
-    yNoise = cell(length(y),1);
-    for i = 1 : length(y)
-        yNoise{i} = y{i} + sqrt(noisVar/2)*(randn(size(y{i})) + 1i*randn(size(y{i})));
+    %power allocation with feedback
+    P = 1;
+    n = noisVar*ones(1,numOfVecs);
+    gamma = (sum(varMat.*n)/(P + sum(n)))^2;
+    powAlocCell = cell(numOfVecs,1);
+    g = zeros(numOfVecs,1);
+    for i = 1 : numOfVecs
+        lambda = varMat(i);
+        g(i) = abs(sqrt((sqrt(lambda*n(i)/gamma) - n(i))/lambda));
+        powAlocCell{i} = g(i)*compSenVec{i};
     end
+    
+    %create IQ format with power allocation
+    [y, numOfDataSym] = OFDMmodulator(powAlocCell);
+    
+    %metadata sent over reliable channel
+    metadata.picSize = [size(picture,1) size(picture,2)];
+    metadata.chunkSize = chunkSize;
+    metadata.meanMat = meanMat;
+    metadata.varMat = varMat;
+    metadata.Aind = Aind;
+    metadata.dataLength = numOfDataSym;
+    metadata.sparsity = numOfNonZero/numOfChunks;
+    
+    
+    
+    
+    %% Rx
+    
+        
+    %data for Rx
+    chunkSizeRx = metadata.chunkSize;
+    numOfChunksRx = prod(metadata.picSize./chunkSizeRx);
+    numOfVecsRx = prod(chunkSizeRx);
+    
+    
+    
+    yNoise = y + sqrt(noisVar/2)*(randn(size(y)) + 1i*randn(size(y)));
     
     %OFDM demodulator
-    compSenVecRx = OFDMdemodulator(yNoise,metadata.dataLength, numOfVecsRx ,metadata.Aind,edges);
+    compSenVecRx = OFDMdemodulator(yNoise,metadata.dataLength, numOfVecsRx ,metadata.Aind,edges,0);
     
     %find g for power allocation
-    Prx = P; %no loss
-    nRx = noisVar*ones(1,numOfVecsRx);
-    gammaRx = (sum(metadata.varMat.*nRx)/(Prx + sum(nRx)))^2;
-    gRx = zeros(numOfVecsRx,1);
-    for i = 1 : numOfVecsRx
+%     Prx = P; %no loss
+%     nRx = noisVar*ones(1,numOfVecsRx);
+%     gammaRx = (sum(metadata.varMat.*nRx)/(Prx + sum(nRx)))^2;
+%     gRx = zeros(numOfVecsRx,1);
+%     for i = 1 : numOfVecsRx
+%         lambda = metadata.varMat(i);
+%         gRx(i) = sqrt((sqrt(lambda*nRx(i)/gammaRx) - nRx(i))/lambda);
+%     end
+    %gRx = g;
+    
+    %power allocation with feedback
+    Prx = 1;
+    n = noisVar*ones(1,numOfVecs);
+    gamma = (sum(metadata.varMat.*n)/(P + sum(n)))^2;    
+    gRx = zeros(numOfVecs,1);
+    for i = 1 : numOfVecs
         lambda = metadata.varMat(i);
-       gRx(i) = sqrt((sqrt(lambda*nRx(i)/gammaRx) - nRx(i))/lambda);
+        gRx(i) = abs(sqrt((sqrt(lambda*n(i)/gamma) - n(i))/lambda));        
     end
-    gRx = g;
-    %power scaling is bypassed for now
+    
     RxOpt = [6];
     for iRx = 1 : length(RxOpt)
         
@@ -166,7 +172,7 @@ numOfVecsRx = prod(chunkSizeRx);
                 %subspace pursuit estimator
                 estX = SubspacePursuitReconstruction(compSenVecRx,A,metadata.Aind,numOfVecsRx);
                 
-            case 4                
+            case 4
                 % OMP estimator
                 estX = OMPReconstruction(compSenVecRx,A,metadata.Aind,numOfVecsRx);
                 
@@ -191,10 +197,10 @@ numOfVecsRx = prod(chunkSizeRx);
         for  i = 1 : numOfVecsRx
             nnzInd = find(~ismember(indTmp,sparsityPatternRx{i}));
             estXMean(nnzInd,i) = estX(nnzInd,i) + metadata.meanMat(i) ;
-        end                    
+        end
         
         rxBlock = zeros(chunkSizeRx(1),chunkSizeRx(2),numOfChunksRx);
-        for iChunk = 1 : numOfChunksRx                                     
+        for iChunk = 1 : numOfChunksRx
             rxBlock(:,:,iChunk) = idct2(reshape(estXMean(iChunk,:),[chunkSizeRx(1) chunkSizeRx(2)])');
         end
         
@@ -215,7 +221,7 @@ numOfVecsRx = prod(chunkSizeRx);
     end
 end
 
-%plotting 
+%plotting
 estimators = { 'AMP' , 'Basis Pursuit', 'Subspace Pursuit', 'OMP', 'CoSamp', 'MMSE'};
 
 figure;
@@ -234,4 +240,3 @@ legend(legendCell);
 %     e(i) = mean((estX(:,i) - dctVecNorm(:,i)).^2);
 % end
 % figure; plot(e)
-    

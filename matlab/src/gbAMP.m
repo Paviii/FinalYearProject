@@ -25,7 +25,7 @@ for iVec = 1 : numOfVecs
     estX(:,iVec) = a_gb;    
     
     [~,idxMin] = sort(abs(a_gb));
-    numOfZeros = (1 - sparsity(iVec))*numOfChunks;
+    numOfZeros = uint32((1 - sparsity(iVec))*numOfChunks);
     sparsityPattern{iVec} = idxMin(1:numOfZeros);
     
     

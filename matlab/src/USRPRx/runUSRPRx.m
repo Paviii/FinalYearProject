@@ -1,31 +1,25 @@
-function   runUSRPRx()
+function [eqSym, noiseVar] =  runUSRPRx(dataLength)
 
 %config
 
 % Set up system
 % Instantiate and configure all objects and structures for packet
 % synchronization and decoding
-EnableScopes = 1;
+EnableScopes = 0;
 % System info
 SampleRate = 20e6; % Hz
 SymbolLength = 80; % Samples in 20MHz OFDM Symbol (FFT+CP)
-FramesToCollect = 100000;
+FramesToCollect = 1;
     %floor(SampleRate*Config.SimInfo.CaptureDuration/SymbolLength);
 DecimationFactor = 1;
-
-
- shortPreambleOFDM = [ 0 0  1+1i 0 0 0  -1-1i 0 0 0 ... % [-27:-17]
- 1+1i 0 0 0  -1-1i 0 0 0 -1-1i 0 0 0   1+1i 0 0 0 ... % [-16:-1]
- 0    0 0 0  -1-1i 0 0 0 -1-1i 0 0 0   1+1i 0 0 0 ... % [0:15]
- 1+1i 0 0 0   1+1i 0 0 0  1+1i 0 0 ].';               % [16:27]
 
 % Set up USRP
 Radio = comm.SDRuReceiver(...
             'Platform',             'B200', ...
             'SerialNum',            '30A3E93', ...
-            'MasterClockRate',      20e6, ...
+            'MasterClockRate',      SampleRate, ...
             'CenterFrequency',      2.3e9, ...
-            'Gain',                 40, ...
+            'Gain',                 50, ...
             'DecimationFactor',     DecimationFactor, ...
             'SamplesPerFrame',      SymbolLength, ...
             'EnableBurstMode',      true,...
@@ -35,9 +29,7 @@ Radio = comm.SDRuReceiver(...
 
 % Set up Front-End Packet Synchronizer
 WLANFrontEnd = customOFDMSync('ChannelBandwidth', 'CBW20');  
-
-% Gain control
-hAGC = comm.AGC('AveragingLength', SymbolLength);
+WLANFrontEnd.numOfDataSymbols = dataLength;
 
 % Set up decoder parameters
 cfgRec = wlanRecoveryConfig('EqualizationMethod', 'ZF');
@@ -58,14 +50,12 @@ end
 %% Collect symbols and search for packets
 % Collect data from the radio one symbol at a time, constructing the packet
 % out of these symbols.  Once a valid packet is captured, try to decode it.
-framCnt = 0; 
-for frame = 1:FramesToCollect
+%for frame = 1:FramesToCollect
+valid = 0;
+while ~valid
     
     % Get data from radio
-    
-    data = GetUSRPFrame(Radio,SymbolLength);
-    %data = step(hAGC,data);
-    %pktOffset = locateOFDMFrame_sdr( 64, shortPreambleOFDM, data);   
+    data = GetUSRPFrame(Radio,SymbolLength);   
     
     if EnableScopes
         step(InputSpectrum,complex(data));
@@ -74,7 +64,7 @@ for frame = 1:FramesToCollect
     % WLANFrontEnd will internally buffer input symbols in-order to build
     % full packets.  The flag valid will be true when a complete packet is
     % captured.
-    [valid, cfgSig, payload, chanEst, noiseVar] = WLANFrontEnd(data,numOfSym);
+    [valid, cfgSig, payload, chanEst, noiseVar] = WLANFrontEnd(data);
     
     % Decode when we have captured a full packet
     if valid     
@@ -109,8 +99,8 @@ for frame = 1:FramesToCollect
         %[ frameBER, estimate, RHard ] = demodOFDMSubcarriers_sdr( RPostEqualizer, tx, estimate );
         
         %print message        
-        message = char(OFDMbits2letters(msg > 0).');
-        disp(message)
+        %message = char(OFDMbits2letters(msg > 0).');
+        %disp(message)
         
         
         
