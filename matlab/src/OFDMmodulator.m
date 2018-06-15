@@ -26,8 +26,10 @@ numOfDataSym = ceil(length(yVecCompl)/numOfSubCar);
 yVecCompl= [yVecCompl; zeros(numOfSubCar - rem(length(yVecCompl),numOfSubCar),1)];
 yPar = reshape(yVecCompl,[numOfDataSym, numOfSubCar]).';
 
-
-
+%%%%%
+save('src/Metadata/damp1','yVecCompl');
+save('src/Metadata/damp2','yPar');
+%%%%%
 H = OFDMModulator(...
     'CyclicPrefixLength',   CyclicPrefixLength,...
     'FFTLength' ,           FFTLength,...
@@ -53,6 +55,10 @@ pilotSeq = [1 1 1 -1].'; % IEEE Std 802.11-2012 Eqn 18-24
 polaritySeq = wlan.internal.pilotPolaritySequence(n+1).'; % IEEE Std 802.11-2012 Eqn 18-25 
 pilots = bsxfun(@times,polaritySeq,pilotSeq);
 
+%%%%%%%
+z =0; % Offset by 1 to account for L-SIG pilot symbol
+pilots = wlan.internal.nonHTPilots(numOfDataSym, z);
+%%%%%%%
 
 Y = step(H,yPar,pilots);
 

@@ -1,5 +1,5 @@
 %% Rx
-
+useCodegen = 1;
 %metadata for Rx
 load('src/Metadata/metadata.mat','metadata');
 A = metadata.A;
@@ -7,50 +7,29 @@ edges = metadata.edges;
 chunkSizeRx = metadata.chunkSize;
 numOfChunksRx = prod(metadata.picSize./chunkSizeRx);
 numOfVecsRx = prod(chunkSizeRx);
+dataLength = metadata.dataLength;
 %figure;
 
-
-% System info
-SampleRate = 20e6; % Hz
-SymbolLength = 1600; % Samples in 20MHz OFDM Symbol (FFT+CP)
-FramesToCollect = 1;
-    %floor(SampleRate*Config.SimInfo.CaptureDuration/SymbolLength);
-DecimationFactor = 1;
-
-
-% Setup USRP
-Radio = comm.SDRuReceiver(...
-            'Platform',             'B200', ...
-            'SerialNum',            '30A3E93', ...
-            'MasterClockRate',      SampleRate, ...
-            'CenterFrequency',      2.3e9, ...
-            'Gain',                 50, ...
-            'DecimationFactor',     DecimationFactor, ...
-            'SamplesPerFrame',      SymbolLength, ...
-            'EnableBurstMode',      true,...
-            'NumFramesInBurst',     1,...
-            'TransportDataType',    'int8', ...
-            'OutputDataType',       'double');
-
-% Set up Front-End Packet Synchronizer
-WLANFrontEnd = customOFDMSync('ChannelBandwidth', 'CBW20');  
-WLANFrontEnd.numOfDataSymbols = metadata.dataLength;
-
-
+if useCodegen 
+    codegen RxWrapper -args {dataLength}
+end
 
 while 1
 
 %capture packet
-[yNoise, noisVar] = RxWrapper(Radio,WLANFrontEnd,SymbolLength);
-
+if useCodegen
+    [yNoise, noisVar] = RxWrapper_mex(dataLength);
+else
+    [yNoise, noisVar] = RxWrapper(dataLength);
+end
 
 %OFDM demodulator
-compSenVecRx = OFDMdemodulator(yNoise,metadata.dataLength, numOfVecsRx ,metadata.Aind,edges,1);
+compSenVecRx = OFDMdemodulator(yNoise,dataLength, numOfVecsRx ,metadata.Aind,edges,1);
 
 
 %power allocation decoding
-Prx = 1;
-n = noisVar*ones(1,numOfVecsRx);
+Prx = 1000;
+n = 0.01*ones(1,numOfVecsRx);
 gamma = (sum(metadata.varMat.*n)/(Prx + sum(n)))^2;
 gRx = zeros(numOfVecsRx,1);
 for i = 1 : numOfVecsRx
@@ -90,9 +69,10 @@ for iRx = 1 : length(RxOpt)
             %extimate X using MMSE
             [sparsityPatternRx, estXAmp] =  gbAMP(compSenVecRx,gRx,A,metadata.Aind,metadata.varMat,metadata.sparsity,numOfVecsRx,noisVar);
             estX = estXAmp;
-            %sparsityPatternRx = sparsityPattern;
+            %sparsityPatternRx = metadata.sparsityPattern;
             
             %estX =  MMSEReconstruction(compSenVecRx,gRx,A,metadata.Aind,metadata.varMat,numOfVecsRx,noisVar,sparsityPatternRx);
+            
             
     end
     
@@ -118,6 +98,7 @@ for iRx = 1 : length(RxOpt)
                 rxBlock(:,:,(iChunk-1)*dimOfChunk(2) + jChunk);
         end
     end
+          
     imshow(rxPic);
     
 

@@ -5,7 +5,7 @@ thresh = 0.01;
 
 
 %image
-picture = imread('test_data/image.jpg');
+picture = imread('test_data/boy.png');
 pictureGrayScale = im2double(rgb2gray(picture));
 % figure; subplot(1,4,1); title('original');
 % imshow(pictureGrayScale);
@@ -89,7 +89,7 @@ end
 %noisVar = 0.1;
 noisVar = 0.01;
 %power allocation with feedback
-P = 1;
+P = 100;
 n = noisVar*ones(1,numOfVecs);
 gamma = (sum(varMat.*n)/(P + sum(n)))^2;
 powAlocCell = cell(numOfVecs,1);
@@ -118,7 +118,12 @@ metadata.sparsity = numOfNonZero/numOfChunks;
 
 metadata.Aind = Aind;
 metadata.A = A;
+
 metadata.y = y;
+metadata.compSenVec = powAlocCell;
+metadata.sparsityPattern = sparsityPattern;
+metadata.g = g;
+metadata.dctVecSpar = dctVecSpar;
 
 save('src/Metadata/metadata','metadata');
 

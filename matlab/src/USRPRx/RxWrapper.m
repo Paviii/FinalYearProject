@@ -1,16 +1,54 @@
-function [eqSym, noiseVar] = RxWrapper(Radio,WLANFrontEnd,SymbolLength)
+function [eqSym, noiseVar] = RxWrapper(dataLength)
 
 
 %config
 
 % Set up system
+% System info
+SampleRate = 40e6; % Hz
+SymbolLength = 80; % Samples in 20MHz OFDM Symbol (FFT+CP)
+FramesToCollect = 1;    
+DecimationFactor = 2;
+
+
+% Setup USRP
+Radio = comm.SDRuReceiver(...
+            'Platform',             'B200', ...
+            'SerialNum',            '30A3E9F',...'30A3E93', ...
+            'MasterClockRate',      SampleRate, ...
+            'CenterFrequency',      2.3e9, ...
+            'Gain',                 30, ...
+            'DecimationFactor',     DecimationFactor, ...
+            'SamplesPerFrame',      SymbolLength, ...
+            'EnableBurstMode',      true,...
+            'NumFramesInBurst',     FramesToCollect,...
+            'TransportDataType',    'int16', ...
+            'LocalOscillatorOffset', 0,...
+            'OutputDataType',       'double');
+        
+% Radio = comm.SDRuReceiver(...
+%             'Platform' , 'N200/N210/USRP2', ...
+%             'IPAddress','192.168.0.4', ...            
+%             'CenterFrequency',      2.3e9, ...
+%             'Gain',                 30, ...
+%             'DecimationFactor',     4, ...
+%             'SamplesPerFrame',      SymbolLength, ...
+%             'EnableBurstMode',      true,...
+%             'NumFramesInBurst',     1,...
+%             'TransportDataType',    'int8', ...
+%             'LocalOscillatorOffset', 0,...
+%             'OutputDataType',       'double');
 % Instantiate and configure all objects and structures for packet
 % synchronization and decoding
 EnableScopes = 1;
 
-
 % Set up decoder parameters
-cfgRec = wlanRecoveryConfig('EqualizationMethod', 'ZF');
+cfgRec = wlanRecoveryConfig('EqualizationMethod', 'MMSE');
+% Set up Front-End Packet Synchronizer
+WLANFrontEnd = customOFDMSync('ChannelBandwidth', 'CBW20','numOfDataSymbols',105);
+%WLANFrontEnd.numOfDataSymbols = dataLength;
+% rateConverter = dsp.FIRRateConverter('InterpolationFactor', 4,...
+%     'DecimationFactor', 5);
 
 % Set up Scopes
 if EnableScopes
@@ -30,7 +68,9 @@ end
 % Collect data from the radio one symbol at a time, constructing the packet
 % out of these symbols.  Once a valid packet is captured, try to decode it.
 %for frame = 1:FramesToCollect
-valid = 0;
+eqSym = zeros(dataLength*48,1);
+noiseVar = 0;
+valid = false;
 while ~valid
     
     % Get data from radio
@@ -51,7 +91,7 @@ while ~valid
         
         % Decode payload to bits
         %use custom decoding
-        [bits,eqSym] = ofdmDataRecover(...
+        eqSym = ofdmDataRecover(...
             payload,...
             chanEst,...
             noiseVar,...
@@ -65,24 +105,7 @@ while ~valid
             for symbol = 1:size(eqSym,2)
                 step(PostEq,eqSym(:,symbol));
             end
-        end
-        
-        % Extract single frame from input buffer
-        %rFrame = buffer(estimate.delay + 1 : estimate.delay + tx.frameLength);
-               
-        % Correct frequency offset
-        %[ rFreqShifted, estimate ] = coarseOFDMFreqEst_sdr( rFrame, tx, estimate);                 
-        % Equalize
-        %[ RPostEqualizer, RPreEqualizer, estimate] = equalizeOFDM( rFreqShifted, tx, estimate, hPreambleDemod, hDataDemod );
-        
-        % Demod subcarriers
-        %[ frameBER, estimate, RHard ] = demodOFDMSubcarriers_sdr( RPostEqualizer, tx, estimate );
-        
-        %print message        
-        %message = char(OFDMbits2letters(msg > 0).');
-        %disp(message)
-        
-        
+        end                        
         
     end
 end

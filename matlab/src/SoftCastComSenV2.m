@@ -80,21 +80,20 @@ end
 % powAlocCell = cell(numOfVecs,1);
 % g = zeros(numOfVecs,1);
 % for i = 1 : numOfVecs
-%     g(i) = 1; %(varMat(i)^-1/4)*gamma;
+%     g(i) = (varMat(i)^-1/4)*gamma;
 %     powAlocCell{i} = g(i)*compSenVec{i};
 % end
 
 
 %channel
 SNR =  [0:50];
-SNR = 100;
 psnrRes = zeros(length(SNR),3);
 for iSNR = 1 : length(SNR)
     noisVar = 10^(-SNR(iSNR)/10);
     
     %power allocation with feedback
     P = 1;
-    n = noisVar*ones(1,numOfVecs);
+    n = 0.01*ones(1,numOfVecs); %noisVar*ones(1,numOfVecs);
     gamma = (sum(varMat.*n)/(P + sum(n)))^2;
     powAlocCell = cell(numOfVecs,1);
     g = zeros(numOfVecs,1);
@@ -135,26 +134,35 @@ for iSNR = 1 : length(SNR)
     compSenVecRx = OFDMdemodulator(yNoise,metadata.dataLength, numOfVecsRx ,metadata.Aind,edges,0);
     
     %find g for power allocation
-%     Prx = P; %no loss
-%     nRx = noisVar*ones(1,numOfVecsRx);
-%     gammaRx = (sum(metadata.varMat.*nRx)/(Prx + sum(nRx)))^2;
-%     gRx = zeros(numOfVecsRx,1);
-%     for i = 1 : numOfVecsRx
-%         lambda = metadata.varMat(i);
-%         gRx(i) = sqrt((sqrt(lambda*nRx(i)/gammaRx) - nRx(i))/lambda);
-%     end
-    %gRx = g;
+    Prx = P; %no loss
+    nRx = 0.01*ones(1,numOfVecsRx);% noisVar*ones(1,numOfVecsRx);
+    gammaRx = (sum(metadata.varMat.*nRx)/(Prx + sum(nRx)))^2;
+    gRx = zeros(numOfVecsRx,1);
+    for i = 1 : numOfVecsRx
+        lambda = metadata.varMat(i);
+        gRx(i) = sqrt((sqrt(lambda*nRx(i)/gammaRx) - nRx(i))/lambda);
+    end
+    gRx = g;
     
     %power allocation with feedback
-    Prx = 1;
-    n = noisVar*ones(1,numOfVecs);
-    gamma = (sum(metadata.varMat.*n)/(P + sum(n)))^2;    
-    gRx = zeros(numOfVecs,1);
-    for i = 1 : numOfVecs
-        lambda = metadata.varMat(i);
-        gRx(i) = abs(sqrt((sqrt(lambda*n(i)/gamma) - n(i))/lambda));        
-    end
+%     Prx = 1;
+%     n = noisVar*ones(1,numOfVecs);
+%     gamma = (sum(metadata.varMat.*n)/(P + sum(n)))^2;    
+%     gRx = zeros(numOfVecs,1);
+%     for i = 1 : numOfVecs
+%         lambda = metadata.varMat(i);
+%         gRx(i) = abs(sqrt((sqrt(lambda*n(i)/gamma) - n(i))/lambda));        
+%     end
     
+    % no feedback
+    Prx = 1;
+    gamma = sqrt(Prx/sum(sqrt(metadata.varMat(:))));
+    powAlocCell = cell(numOfVecsRx,1);
+    gRx = zeros(numOfVecsRx,1);
+    for i = 1 : numOfVecsRx
+        gRx(i) = (metadata.varMat(i)^-1/4)*gamma;        
+    end
+    gRx = g;
     RxOpt = [6];
     for iRx = 1 : length(RxOpt)
         
@@ -183,11 +191,11 @@ for iSNR = 1 : length(SNR)
                 
             otherwise
                 %extimate X using MMSE
-                [sparsityPatternRx, estXAmp] =  gbAMP(compSenVecRx,gRx,A,metadata.Aind,metadata.varMat,metadata.sparsity,numOfVecsRx,noisVar);
-                estX = estXAmp;
-                %sparsityPatternRx = sparsityPattern;
+                %[sparsityPatternRx, estXAmp] =  gbAMP(compSenVecRx,gRx,A,metadata.Aind,metadata.varMat,metadata.sparsity,numOfVecsRx,noisVar);
+                %estX = estXAmp;
+                sparsityPatternRx = sparsityPattern;
                 
-                %estX =  MMSEReconstruction(compSenVecRx,gRx,A,metadata.Aind,metadata.varMat,numOfVecsRx,noisVar,sparsityPatternRx);
+                estX =  MMSEReconstruction(compSenVecRx,gRx,A,metadata.Aind,metadata.varMat,numOfVecsRx,noisVar,sparsityPatternRx);
                 
         end
         
@@ -213,9 +221,6 @@ for iSNR = 1 : length(SNR)
                     rxBlock(:,:,(iChunk-1)*dimOfChunk(2) + jChunk);
             end
         end
-        %figure;
-        %getSDRuDriverVersion
-        %pause
         
         psnrRes(iSNR,iRx) = psnr(rxPic,pictureGrayScale);
     end

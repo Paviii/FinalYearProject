@@ -36,8 +36,7 @@ properties (Access = private)
     % L-SIG decoding related
     pCfgRec
     pLSIGSym
-    % PSDU decoding related
-    pNumDataSymbols
+    % PSDU decoding related    
     pFullPayload
     pNumCollectedDataSym
     % Output related
@@ -117,8 +116,7 @@ methods (Access = protected)
     obj.pLLTFBufferedSymbols = 0;
     obj.pTimingOffset        = 0;
     obj.pCoarseCFOEst        = 0;
-    obj.pFineCFOEst          = 0;
-    obj.pNumDataSymbols      = 0;
+    obj.pFineCFOEst          = 0;    
     obj.pNumCollectedDataSym = 0;
     obj.pNoiseVarEst         = 0; 
     
@@ -161,7 +159,7 @@ methods (Access = protected)
         obj.pLSTFSearchBuffer = [obj.pLSTFSearchBuffer(symLen+1:end); data];
         
         if ~obj.pPacketDetected % Packet Detect
-            pktOffset = wlanPacketDetect(obj.pLSTFSearchBuffer + 0.01*(randn(160,1) + 1i*randn(160,1)), chanBW,0,0.9);
+            pktOffset = wlanPacketDetect(obj.pLSTFSearchBuffer + 0.005*(randn(160,1) + 1i*randn(160,1)), chanBW,0,0.5);
             %pktOffset = locateOFDMFrame_sdr( 64, obj.pLSTFSearchBuffer);
             
             if ~isempty(pktOffset) && (pktOffset(1) <= symLen)
@@ -221,9 +219,9 @@ methods (Access = protected)
                     obj.pSyncSymbolBuffer(complex(symSyncInput(1:symLen,:)), obj.pTimingOffset);                        
 
                     % Switch to data buffering
-                    obj.pFullPayload = complex(zeros(obj.pNumDataSymbols*symLen, 1));
+                    obj.pFullPayload = complex(zeros(obj.numOfDataSymbols*symLen, 1));
                     obj.pTimingSynced = true;  
-                    obj.pNumCollectedDataSym = 0;
+                    obj.pNumCollectedDataSym = 0;                    
                     
                 elseif obj.pLLTFBufferedSymbols == 4 
                     % Symbol timing failed -- switch back to packet detection 
@@ -232,8 +230,7 @@ methods (Access = protected)
                 end
             else % L-SIG decoding and PSDU buffering
                 % Perform symbol synchronization
-                syncedSym = obj.pSyncSymbolBuffer(complex(data), obj.pTimingOffset);
-
+                syncedSym = obj.pSyncSymbolBuffer(complex(data), obj.pTimingOffset);                
                 % Fine frequency offset compensator
                 syncedSym(1:symLen,:) = obj.pFineFreqCompensator(syncedSym(1:symLen,:), -obj.pFineCFOEst);
 
@@ -266,17 +263,16 @@ methods (Access = protected)
 %                 else 
                     % PSDU buffering
                     % Keep buffering payload
-                    
-                    obj.pNumDataSymbols = obj.numOfDataSymbols;
-                    obj.pCfgNonHT.PSDULength = obj.pNumDataSymbols;
+                                        
+                    obj.pCfgNonHT.PSDULength = obj.numOfDataSymbols;
                     obj.pNumCollectedDataSym = obj.pNumCollectedDataSym + 1;
                     obj.pFullPayload((obj.pNumCollectedDataSym-1)*symLen+(1:symLen), :) = syncedSym(1:symLen, :);                   
                     
-                    if obj.pNumCollectedDataSym == obj.pNumDataSymbols
+                    if obj.pNumCollectedDataSym == obj.numOfDataSymbols
                         % Output when payload is full
                         validPacket = true;
                         cfgSig    = obj.pCfgNonHT;
-                        rxData = obj.pFullPayload(1:obj.pNumDataSymbols*symLen, :);
+                        rxData = obj.pFullPayload(1:obj.numOfDataSymbols*symLen, :);
                         chanEst     = obj.pChanEst;
                         noiseVarEst = obj.pNoiseVarEst;
                         
