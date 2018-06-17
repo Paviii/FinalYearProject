@@ -48,7 +48,7 @@ cfgOFDM.NormalizationFactor = 1;
 % Pilot phase tracking
 if calculateCPE==true || strcmp(pilotPhaseTracking, 'PreEQ')
     % Get reference pilots, from IEEE Std 802.11-2012, Eqn 18-22
-    z =0; % Offset by 1 to account for L-SIG pilot symbol
+    z = 1; % Offset by 1 to account for L-SIG pilot symbol
     refPilots = wlan.internal.nonHTPilots(numOFDMSym, z);
     
     % Estimate CPE and phase correct symbols
@@ -64,7 +64,7 @@ end
 % Equalization method
 [eqDataSym, csiData] = wlan.internal.wlanEqualize(ofdmDemodData, chanEstData, eqMethod, noiseVarEst);
 
-eqDataSym = reshape(eqDataSym.',numel(eqDataSym), []);
+%eqDataSym = reshape(eqDataSym.',numel(eqDataSym), []);
 
 
 

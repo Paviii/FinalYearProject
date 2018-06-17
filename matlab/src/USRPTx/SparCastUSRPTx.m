@@ -3,9 +3,11 @@
 chunkSize = [25 25];
 thresh = 0.01;
 
+payloadLength = 30;
+
 
 %image
-picture = imread('test_data/boy.png');
+picture = imread('test_data/image.jpg');
 pictureGrayScale = im2double(rgb2gray(picture));
 % figure; subplot(1,4,1); title('original');
 % imshow(pictureGrayScale);
@@ -97,12 +99,12 @@ g = zeros(numOfVecs,1);
 for i = 1 : numOfVecs
      lambda = varMat(i);
      g(i) = sqrt((sqrt(lambda*n(i)/gamma) - n(i))/lambda);
-     powAlocCell{i} = g(i)*compSenVec{i};
-     %powAlocCell{i} = compSenVec{i};
+     powAlocCell{i} = g(i)*compSenVec{i};     
 end
 
 %create IQ format with power allocation 
-[y, numOfDataSym] = OFDMmodulator(powAlocCell);
+[y, numOfDataSym] = OFDMmodulator(powAlocCell,payloadLength);
+
 
 %save metadata
 %metadata sent over reliable channel
@@ -113,7 +115,9 @@ metadata.varMat = varMat;
 
 metadata.edges = edges;
 metadata.dataLength = numOfDataSym;
+metadata.payloadLength = payloadLength;
 metadata.sparsity = numOfNonZero/numOfChunks;
+
 
 
 metadata.Aind = Aind;

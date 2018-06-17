@@ -1,4 +1,4 @@
-function [Y, numOfDataSym]  = OFDMmodulator(data)
+function [txSig, numOfDataSym]  = OFDMmodulator(data,payloadLength)
 %input data in cell array
 
 %number of data subcarriers
@@ -25,76 +25,52 @@ numOfDataSym = ceil(length(yVecCompl)/numOfSubCar);
 %pad zeros
 yVecCompl= [yVecCompl; zeros(numOfSubCar - rem(length(yVecCompl),numOfSubCar),1)];
 yPar = reshape(yVecCompl,[numOfDataSym, numOfSubCar]).';
+%pad zeros for packet segments
+yPar = [yPar zeros(numOfSubCar,payloadLength - rem(numOfDataSym,payloadLength))];
 
 %%%%%
 save('src/Metadata/damp1','yVecCompl');
 save('src/Metadata/damp2','yPar');
 %%%%%
-H = OFDMModulator(...
+H = comm.OFDMModulator(...
     'CyclicPrefixLength',   CyclicPrefixLength,...
     'FFTLength' ,           FFTLength,...
     'NumGuardBandCarriers', NumGuardBandCarriers,...
-    'NumSymbols',           numOfDataSym,...
+    'NumSymbols',           payloadLength,...
     'PilotInputPort',       true,...
     'PilotCarrierIndices',  PilotCarrierIndices,...
     'InsertDCNull',         true);
 
-% Create Pilots
-% hPN = comm.PNSequence(...
-%     'Polynomial',[1 0 0 0 1 0 0 1],...
-%     'SamplesPerFrame',numOfDataSym,...
-%     'InitialConditions',[1 1 1 1 1 1 1]);
-% 
-% pilot = step(hPN); % Create pilot
-% pilots = repmat(pilot, 1, 4 ); % Expand to all pilot tones
-% pilots = 2*double(pilots.'<1)-1; % Bipolar to unipolar
-% pilots(4,:) = -1*pilots(4,:); % Invert last pilot
 
-n = (0:numOfDataSym-1).'; % Indices of symbols within the field
-pilotSeq = [1 1 1 -1].'; % IEEE Std 802.11-2012 Eqn 18-24
-polaritySeq = wlan.internal.pilotPolaritySequence(n+1).'; % IEEE Std 802.11-2012 Eqn 18-25 
-pilots = bsxfun(@times,polaritySeq,pilotSeq);
+numOfOPackets = ceil(numOfDataSym/payloadLength);
 
-%%%%%%%
-z =0; % Offset by 1 to account for L-SIG pilot symbol
-pilots = wlan.internal.nonHTPilots(numOfDataSym, z);
-%%%%%%%
+config = wlanNonHTConfig('ChannelBandwidth','CBW20');
+sigPow = var(yVecCompl);
+STF = wlanLSTF(config);
+STF = STF/max(abs(STF));
+LTF = wlanLLTF(config);
+LTF = LTF/max(abs(LTF));
+z =1; % Offset by 1 to account for L-SIG pilot symbol
+pilots = wlan.internal.nonHTPilots(payloadLength, z);
 
-Y = step(H,yPar,pilots);
+
+%interpolate
+rateConverter = dsp.FIRRateConverter('InterpolationFactor', 5,...
+    'DecimationFactor', 4);
+
+%create waveform
+txSig = [];
+for iPacket = 1 : numOfOPackets
+    config.PSDULength = iPacket;
+    SIG = sqrt(sigPow)*wlanLSIG(config);
+    SIG = SIG/max(abs(SIG));    
+    PPDU = step(H,yPar(:,(iPacket-1)*payloadLength+1:iPacket*payloadLength),pilots);
+   
+    txSig = [txSig; STF; LTF; SIG; PPDU];
+end
+
 
 H.release();
-%hPN.release();
-
-
-
-% Y = cell(numOfChannelSymbols,1);
-% numOfSym = zeros(numOfChannelSymbols,1);
-% for iChannSymb = 1 : numOfChannelSymbols
-%     dataInd = (iChannSymb-1)*numOfSubCar + 1 : min((iChannSymb-1)*numOfSubCar + numOfSubCar,length(data));
-%     vecLen = max(cellfun(@(x) numel(x),data(dataInd)));
-%     
-%     H.NumSymbols = ceil(vecLen/2);
-%     hPN.SamplesPerFrame = H.NumSymbols;
-%     
-%     
-%     
-%     dataMat = zeros(numOfSubCar,H.NumSymbols);
-%     dataTmp = data(dataInd);
-%     
-%     for iSubCar =  1 : length(dataInd)
-%         vecTmp = dataTmp{iSubCar};
-%         %add zero if not even
-%         if bitget(length(vecTmp),1)
-%             vecTmp = [vecTmp; 0];
-%         end
-%         dataMat(iSubCar,1:ceil(length(vecTmp)/2)) = vecTmp(1:end/2) + 1i*vecTmp(end/2+1:end);
-%     end
-%     
-%     Y{iChannSymb} = step(H,dataMat,pilots);
-%     numOfSym(iChannSymb) = length(Y{iChannSymb});
-%     H.release();
-%     hPN.release();
-% end
 
 
 end

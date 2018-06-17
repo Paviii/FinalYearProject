@@ -1,4 +1,4 @@
-function [eqSym, noiseVar] = RxWrapper(dataLength)
+function [eqSym, noiseVar] = RxWrapper(paylaodLength,numOfPackets,dataLength)
 
 
 %config
@@ -45,7 +45,7 @@ EnableScopes = 1;
 % Set up decoder parameters
 cfgRec = wlanRecoveryConfig('EqualizationMethod', 'MMSE');
 % Set up Front-End Packet Synchronizer
-WLANFrontEnd = customOFDMSync('ChannelBandwidth', 'CBW20','numOfDataSymbols',105);
+WLANFrontEnd = customOFDMSync('ChannelBandwidth', 'CBW20','numOfDataSymbols',paylaodLength);
 %WLANFrontEnd.numOfDataSymbols = dataLength;
 % rateConverter = dsp.FIRRateConverter('InterpolationFactor', 4,...
 %     'DecimationFactor', 5);
@@ -68,10 +68,13 @@ end
 % Collect data from the radio one symbol at a time, constructing the packet
 % out of these symbols.  Once a valid packet is captured, try to decode it.
 %for frame = 1:FramesToCollect
-eqSym = zeros(dataLength*48,1);
+eqSym = complex(zeros(48,numOfPackets*paylaodLength),0);
 noiseVar = 0;
 valid = false;
-while ~valid
+packetSeq = 1:numOfPackets;
+detPack = [];
+
+while ~all(ismember(packetSeq, detPack))
     
     % Get data from radio
     data = GetUSRPFrame(Radio,SymbolLength);   
@@ -83,7 +86,7 @@ while ~valid
     % WLANFrontEnd will internally buffer input symbols in-order to build
     % full packets.  The flag valid will be true when a complete packet is
     % captured.
-    [valid, cfgSig, payload, chanEst, noiseVar] = WLANFrontEnd(data);
+    [valid, cfgSig, payload, chanEst, noiseVar, seqNum] = WLANFrontEnd(data);
     
     
     % Decode when we have captured a full packet
@@ -91,25 +94,28 @@ while ~valid
         
         % Decode payload to bits
         %use custom decoding
-        eqSym = ofdmDataRecover(...
+        eqSym(:,(seqNum-1)*paylaodLength+1:seqNum*paylaodLength) = ofdmDataRecover(...
             payload,...
             chanEst,...
             noiseVar,...
             cfgSig,...
             cfgRec);
-        
+
         % View post equalized symbols and equalizer taps
         if EnableScopes
             step(ArrayEqTaps,chanEst);
             % Animate
-            for symbol = 1:size(eqSym,2)
-                step(PostEq,eqSym(:,symbol));
-            end
-        end                        
+%             for symbol = 1:size(eqSym,2)
+%                 step(PostEq,eqSym(:,symbol));                
+%             end
+            
+        end 
+        
+        detPack = [detPack; seqNum];
         
     end
 end
-
+eqSym = reshape(eqSym(:,1:dataLength).',numel(eqSym(:,1:dataLength)), []);
 % Cleanup objects
 release(Radio); release(WLANFrontEnd);
 

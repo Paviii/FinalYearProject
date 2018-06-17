@@ -33,11 +33,3 @@ release(hSDRu);
 
 end
 
-% iStart = 1;
-% for iPacket = 1:length(numOfSymVec)
-%     % Send data to USRP
-%     txPacket = txOrg(iStart:iStart+numOfSymVec(iPacket)-1);
-%     step(hSDRu, txPacket);
-%     iStart = iStart +  numOfSymVec(iPacket);
-%     release(hSDRu);
-% end

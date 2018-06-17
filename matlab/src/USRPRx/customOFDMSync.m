@@ -16,8 +16,7 @@ properties (Access = private, Nontunable)
     pCoarseFreqCompensator
     pFineFreqCompensator
     pSyncSymbolBuffer
-    pSymbolLen
-    shortPreambleOFDM
+    pSymbolLen    
 end
 
 properties (Access = private)
@@ -36,6 +35,7 @@ properties (Access = private)
     % L-SIG decoding related
     pCfgRec
     pLSIGSym
+    pSeqNum
     % PSDU decoding related    
     pFullPayload
     pNumCollectedDataSym
@@ -90,7 +90,7 @@ methods (Access = protected)
     obj.pSymbolLen = 4*Rs/1e6;
 
     % Instantiate objects
-    obj.pAGC = comm.AGC('AveragingLength',obj.numOfDataSymbols);
+    obj.pAGC = comm.AGC('AveragingLength',obj.numOfDataSymbols*10);
 
     obj.pCoarseFreqCompensator = comm.PhaseFrequencyOffset( ...
         'FrequencyOffsetSource', 'Input port', ...
@@ -119,6 +119,7 @@ methods (Access = protected)
     obj.pFineCFOEst          = 0;    
     obj.pNumCollectedDataSym = 0;
     obj.pNoiseVarEst         = 0; 
+    obj.pSeqNum              = 0;
     
     % Initialize flags for modes
     obj.pPacketDetected = false;
@@ -138,13 +139,14 @@ methods (Access = protected)
     reset(obj.pSyncSymbolBuffer);
   end
   
-  function [validPacket, cfgSig, rxData, chanEst, noiseVarEst, data] = stepImpl(obj, x)    
+  function [validPacket, cfgSig, rxData, chanEst, noiseVarEst, seqNum, data ] = stepImpl(obj, x)    
     % Output initialization
     validPacket = false;
     cfgSig    = obj.pCfgNonHT;
     rxData = complex(0);
     chanEst     = complex(0);
-    noiseVarEst = 0;    
+    noiseVarEst = 0;
+    seqNum = 0;
     
     % Parameters
     chanBW = obj.ChannelBandwidth;
@@ -175,7 +177,7 @@ methods (Access = protected)
             end
         else
             % AGC
-            data = obj.pAGC(data);
+            %data = obj.pAGC(data);
             
             % Coarse frequency offset compensator
             data = obj.pCoarseFreqCompensator(data, -obj.pCoarseCFOEst);
@@ -203,8 +205,8 @@ methods (Access = protected)
                         LLTF(symLen+(1:symLen)), -obj.pFineCFOEst);
 
                     % Channel estimation
-                    demodLLTF = wlanLLTFDemodulate(LLTF, chanBW);
-                    obj.pChanEst = wlanLLTFChannelEstimate(demodLLTF, chanBW);
+                    demodLLTF = wlanLLTFDemodulate(LLTF*1.439761298433433, chanBW); %the LTF is scale due to scale in TX
+                    obj.pChanEst = wlanLLTFChannelEstimate(demodLLTF, chanBW); 
                     
                     % Estimate noise power using L-LTF field
                     obj.pNoiseVarEst = helperNoiseEstimate(demodLLTF);
@@ -219,9 +221,8 @@ methods (Access = protected)
                     obj.pSyncSymbolBuffer(complex(symSyncInput(1:symLen,:)), obj.pTimingOffset);                        
 
                     % Switch to data buffering
-                    obj.pFullPayload = complex(zeros(obj.numOfDataSymbols*symLen, 1));
-                    obj.pTimingSynced = true;  
-                    obj.pNumCollectedDataSym = 0;                    
+                    obj.pTimingSynced = true;
+                    obj.pLSIGDecoded = false;
                     
                 elseif obj.pLLTFBufferedSymbols == 4 
                     % Symbol timing failed -- switch back to packet detection 
@@ -234,13 +235,20 @@ methods (Access = protected)
                 % Fine frequency offset compensator
                 syncedSym(1:symLen,:) = obj.pFineFreqCompensator(syncedSym(1:symLen,:), -obj.pFineCFOEst);
 
-%                 if ~obj.pLSIGDecoded % L-SIG decoding
-%                     [LSIGBits, failParityCheck] = wlanLSIGRecover(...
-%                         syncedSym, obj.pChanEst, obj.pNoiseVarEst, chanBW, obj.pCfgRec);
-%                     obj.pLSIGSym = syncedSym; % Buffer for format detection
-%                     
-%                     % L-SIG evaluation
-%                     if ~failParityCheck
+                if ~obj.pLSIGDecoded % L-SIG decoding
+                     [LSIGBits, failParityCheck] = wlanLSIGRecover(...
+                         syncedSym, obj.pChanEst, obj.pNoiseVarEst, chanBW, obj.pCfgRec);
+                     obj.pLSIGSym = syncedSym; % Buffer for format detection
+                     
+                     % L-SIG evaluation
+                     if ~failParityCheck
+                         obj.pSeqNum = bi2de(double(LSIGBits(6:17)'));
+                        % Switch to PSDU buffering mode
+                        obj.pLSIGDecoded = true;
+                        obj.pFullPayload = complex(zeros(obj.numOfDataSymbols*symLen, 1));
+                        obj.pNumCollectedDataSym = 0;
+                                              
+                           
 %                         % Recover packet parameters
 %                         rate = bi2de(double(LSIGBits(1:3).'), 'left-msb');
 %                         if rate <= 1
@@ -253,14 +261,11 @@ methods (Access = protected)
 %                         % Obtain number of OFDM symbols in data field
 %                         obj.pNumDataSymbols = getNumDataSymbols(obj);
 %                         
-%                         % Switch to PSDU buffering mode
-%                         obj.pLSIGDecoded = true;
-%                         obj.pFullPayload = complex(zeros(obj.pNumDataSymbols*symLen, 1));
-%                         obj.pNumCollectedDataSym = 0;
-%                     else % L-SIG parity failed -- switch back to packet detection 
-%                         obj.pPacketDetected = false;
-%                     end
-%                 else 
+
+                     else % L-SIG parity failed -- switch back to packet detection 
+                         obj.pPacketDetected = false;
+                     end
+                 else 
                     % PSDU buffering
                     % Keep buffering payload
                                         
@@ -275,11 +280,12 @@ methods (Access = protected)
                         rxData = obj.pFullPayload(1:obj.numOfDataSymbols*symLen, :);
                         chanEst     = obj.pChanEst;
                         noiseVarEst = obj.pNoiseVarEst;
+                        seqNum = obj.pSeqNum;
                         
                         % Switch back to packet detection
                         obj.pPacketDetected = false;
                     end
-                %end
+                end
             end 
         end 
     end 
