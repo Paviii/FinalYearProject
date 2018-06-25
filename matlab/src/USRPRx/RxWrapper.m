@@ -1,34 +1,12 @@
-function [eqSym, noiseVar] = RxWrapper(paylaodLength,numOfPackets,dataLength)
+function [eqSym, noiseVar, frameNumber] = RxWrapper(paylaodLength,numOfPackets,dataLength,Radio)
 
 
 %config
+SymbolLength = 80;
 
-% Set up system
-% System info
-SampleRate = 40e6; % Hz
-SymbolLength = 80; % Samples in 20MHz OFDM Symbol (FFT+CP)
-FramesToCollect = 1;    
-DecimationFactor = 2;
-
-
-% Setup USRP
-Radio = comm.SDRuReceiver(...
-            'Platform',             'B200', ...
-            'SerialNum',            '30A3E9F',...'30A3E93', ...
-            'MasterClockRate',      SampleRate, ...
-            'CenterFrequency',      2.3e9, ...
-            'Gain',                 30, ...
-            'DecimationFactor',     DecimationFactor, ...
-            'SamplesPerFrame',      SymbolLength, ...
-            'EnableBurstMode',      true,...
-            'NumFramesInBurst',     FramesToCollect,...
-            'TransportDataType',    'int16', ...
-            'LocalOscillatorOffset', 0,...
-            'OutputDataType',       'double');
-        
 % Radio = comm.SDRuReceiver(...
 %             'Platform' , 'N200/N210/USRP2', ...
-%             'IPAddress','192.168.0.4', ...            
+%             'IPAddress','192.168.0.4', ...
 %             'CenterFrequency',      2.3e9, ...
 %             'Gain',                 30, ...
 %             'DecimationFactor',     4, ...
@@ -40,7 +18,7 @@ Radio = comm.SDRuReceiver(...
 %             'OutputDataType',       'double');
 % Instantiate and configure all objects and structures for packet
 % synchronization and decoding
-EnableScopes = 1;
+EnableScopes = 0;
 
 % Set up decoder parameters
 cfgRec = wlanRecoveryConfig('EqualizationMethod', 'MMSE');
@@ -77,44 +55,61 @@ detPack = [];
 while ~all(ismember(packetSeq, detPack))
     
     % Get data from radio
-    data = GetUSRPFrame(Radio,SymbolLength);   
+    data = GetUSRPFrame(Radio,SymbolLength);
     
     if EnableScopes
         step(InputSpectrum,complex(data));
     end
-        
+    
     % WLANFrontEnd will internally buffer input symbols in-order to build
     % full packets.  The flag valid will be true when a complete packet is
     % captured.
-    [valid, cfgSig, payload, chanEst, noiseVar, seqNum] = WLANFrontEnd(data);
     
-    
-    % Decode when we have captured a full packet
-    if valid             
+    %for i = 1 : length(data)/80
         
-        % Decode payload to bits
-        %use custom decoding
-        eqSym(:,(seqNum-1)*paylaodLength+1:seqNum*paylaodLength) = ofdmDataRecover(...
-            payload,...
-            chanEst,...
-            noiseVar,...
-            cfgSig,...
-            cfgRec);
-
-        % View post equalized symbols and equalizer taps
-        if EnableScopes
-            step(ArrayEqTaps,chanEst);
-            % Animate
-%             for symbol = 1:size(eqSym,2)
-%                 step(PostEq,eqSym(:,symbol));                
+        [valid, cfgSig, payload, chanEst, noiseVar, seqFramNum] = WLANFrontEnd(data);
+        
+        
+        % Decode when we have captured a full packet
+        if valid
+            
+            % Decode payload to bits
+            disp(seqFramNum)
+            frameNumber = ceil(seqFramNum/10);
+            seqNum = rem(seqFramNum,10);
+            if seqNum == 0
+                continue;
+            end
+            %use custom decoding
+            eqSym(:,(seqNum-1)*paylaodLength+1:seqNum*paylaodLength) = ofdmDataRecover(...
+                payload,...
+                chanEst,...
+                noiseVar,...
+                cfgSig,...
+                cfgRec);
+            
+            % View post equalized symbols and equalizer taps
+            if EnableScopes
+                step(ArrayEqTaps,chanEst);
+                % Animate
+                %             for symbol = 1:size(eqSym,2)
+                %                 step(PostEq,eqSym(:,symbol));
+                %             end
+                
+            end
+            
+            detPack = [detPack; seqNum];
+%             if ~all(ismember(packetSeq, detPack))
+%                 break;
 %             end
             
-        end 
+        end
         
-        detPack = [detPack; seqNum];
-        
-    end
 end
+
+fileID = fopen('src/Metadata/ack.bin','w'); 
+fwrite(fileID,1,'uint');
+
 eqSym = reshape(eqSym(:,1:dataLength).',numel(eqSym(:,1:dataLength)), []);
 % Cleanup objects
 release(Radio); release(WLANFrontEnd);
@@ -124,15 +119,15 @@ end
 
 %% Blocking USRP Function
 function data = GetUSRPFrame(Radio,SymbolLength)
-    % Keep accessing the SDRu System object output until it is valid
-    len = uint32(0);
-    data = coder.nullcopy(complex(zeros(SymbolLength,1)));
-    while len <= 0
-        [data,len] = step(Radio);
-        if all(data == 0)
-            len = uint32(0);
-        end
+% Keep accessing the SDRu System object output until it is valid
+len = uint32(0);
+data = coder.nullcopy(complex(zeros(SymbolLength,1)));
+while len <= 0
+    [data,len] = step(Radio);
+    if all(data == 0)
+        len = uint32(0);
     end
+end
 end
 
 function [PostEq,InputSpectrum,ArrayEqTaps] = SetupScopes(FigurePositions,SamplesRate)

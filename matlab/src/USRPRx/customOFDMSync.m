@@ -161,8 +161,7 @@ methods (Access = protected)
         obj.pLSTFSearchBuffer = [obj.pLSTFSearchBuffer(symLen+1:end); data];
         
         if ~obj.pPacketDetected % Packet Detect
-            pktOffset = wlanPacketDetect(obj.pLSTFSearchBuffer + 0.005*(randn(160,1) + 1i*randn(160,1)), chanBW,0,0.5);
-            %pktOffset = locateOFDMFrame_sdr( 64, obj.pLSTFSearchBuffer);
+            pktOffset = wlanPacketDetect(obj.pLSTFSearchBuffer + 0.0005*(randn(160,1) + 1i*randn(160,1)), chanBW,0,0.5);           
             
             if ~isempty(pktOffset) && (pktOffset(1) <= symLen)
                 % Estimate CFO when more than one L-STF symbol in buffer
@@ -243,10 +242,14 @@ methods (Access = protected)
                      % L-SIG evaluation
                      if ~failParityCheck
                          obj.pSeqNum = bi2de(double(LSIGBits(6:17)'));
-                        % Switch to PSDU buffering mode
-                        obj.pLSIGDecoded = true;
-                        obj.pFullPayload = complex(zeros(obj.numOfDataSymbols*symLen, 1));
-                        obj.pNumCollectedDataSym = 0;
+                         if (obj.pSeqNum > 100)
+                             obj.pPacketDetected = false;
+                         else 
+                             % Switch to PSDU buffering mode
+                             obj.pLSIGDecoded = true;
+                             obj.pFullPayload = complex(zeros(obj.numOfDataSymbols*symLen, 1));
+                             obj.pNumCollectedDataSym = 0;
+                         end
                                               
                            
 %                         % Recover packet parameters
@@ -281,6 +284,7 @@ methods (Access = protected)
                         chanEst     = obj.pChanEst;
                         noiseVarEst = obj.pNoiseVarEst;
                         seqNum = obj.pSeqNum;
+                        
                         
                         % Switch back to packet detection
                         obj.pPacketDetected = false;

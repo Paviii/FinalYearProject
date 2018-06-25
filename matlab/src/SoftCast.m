@@ -9,7 +9,7 @@ dctpicture = dct2(pictureGrayScaleNorm);
 
 %chunks
 thresh = 0.00001;
-chunkSize = [9 9];
+chunkSize = [25 25];
 iSize = size(dctpicture,1)/chunkSize(1);
 jSize = size(dctpicture,2)/chunkSize(2);
 pictureChunks = zeros(iSize,jSize);

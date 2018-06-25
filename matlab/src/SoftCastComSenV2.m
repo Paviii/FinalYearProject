@@ -86,7 +86,8 @@ end
 
 
 %channel
-SNR =  [0:50];
+SNR =  [0:30];
+%SNR = 100;
 psnrRes = zeros(length(SNR),3);
 for iSNR = 1 : length(SNR)
     noisVar = 10^(-SNR(iSNR)/10);
@@ -99,13 +100,13 @@ for iSNR = 1 : length(SNR)
     g = zeros(numOfVecs,1);
     for i = 1 : numOfVecs
         lambda = varMat(i);
-        g(i) = abs(sqrt((sqrt(lambda*n(i)/gamma) - n(i))/lambda));
+        g(i) =1;  abs(sqrt((sqrt(lambda*n(i)/gamma) - n(i))/lambda));
         powAlocCell{i} = g(i)*compSenVec{i};
     end
     
     %create IQ format with power allocation
-    [y, numOfDataSym] = OFDMmodulator(powAlocCell);
-    
+    %[y, numOfDataSym] = OFDMmodulator(powAlocCell);
+    numOfDataSym = 1;
     %metadata sent over reliable channel
     metadata.picSize = [size(picture,1) size(picture,2)];
     metadata.chunkSize = chunkSize;
@@ -128,10 +129,14 @@ for iSNR = 1 : length(SNR)
     
     
     
-    yNoise = y + sqrt(noisVar/2)*(randn(size(y)) + 1i*randn(size(y)));
+    %yNoise = y + sqrt(noisVar/2)*(randn(size(y)) + 1i*randn(size(y)));
     
     %OFDM demodulator
-    compSenVecRx = OFDMdemodulator(yNoise,metadata.dataLength, numOfVecsRx ,metadata.Aind,edges,0);
+    %compSenVecRx = OFDMdemodulator(yNoise,metadata.dataLength, numOfVecsRx ,metadata.Aind,edges,0);
+    compSenVecRx = {};
+    for iVec = 1 : length(powAlocCell)
+        compSenVecRx{iVec} = powAlocCell{iVec} +  sqrt(noisVar)*(randn(size(powAlocCell{iVec})));
+    end
     
     %find g for power allocation
     Prx = P; %no loss
@@ -155,22 +160,23 @@ for iSNR = 1 : length(SNR)
 %     end
     
     % no feedback
-    Prx = 1;
-    gamma = sqrt(Prx/sum(sqrt(metadata.varMat(:))));
-    powAlocCell = cell(numOfVecsRx,1);
-    gRx = zeros(numOfVecsRx,1);
-    for i = 1 : numOfVecsRx
-        gRx(i) = (metadata.varMat(i)^-1/4)*gamma;        
-    end
-    gRx = g;
-    RxOpt = [6];
+%     Prx = 1;
+%     gamma = sqrt(Prx/sum(sqrt(metadata.varMat(:))));
+%     
+%     gRx = zeros(numOfVecsRx,1);
+%     for i = 1 : numOfVecsRx
+%         gRx(i) = (metadata.varMat(i)^-1/4)*gamma;        
+%     end
+%     gRx = g;
+    RxOpt = [1,6];
     for iRx = 1 : length(RxOpt)
         
         switch RxOpt(iRx)
             case 1
                 %AMP estimator
                 %estX = AMPReconstruction(y,A,metadata.Aind,numOfVecsRx,metadata.varMat);
-                estX = AMPReconstruction2(compSenVecRx,A,metadata.Aind,numOfVecsRx);
+                %estX = AMPReconstruction2(compSenVecRx,A,metadata.Aind,numOfVecsRx);
+                [sparsityPatternRx, estX] =  gbAMP(compSenVecRx,gRx,A,metadata.Aind,metadata.varMat,metadata.sparsity,numOfVecsRx,noisVar);
                 
             case 2
                 %basis pursuit estimator
@@ -194,7 +200,7 @@ for iSNR = 1 : length(SNR)
                 %[sparsityPatternRx, estXAmp] =  gbAMP(compSenVecRx,gRx,A,metadata.Aind,metadata.varMat,metadata.sparsity,numOfVecsRx,noisVar);
                 %estX = estXAmp;
                 sparsityPatternRx = sparsityPattern;
-                
+                                
                 estX =  MMSEReconstruction(compSenVecRx,gRx,A,metadata.Aind,metadata.varMat,numOfVecsRx,noisVar,sparsityPatternRx);
                 
         end

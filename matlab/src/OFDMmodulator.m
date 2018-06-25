@@ -1,4 +1,4 @@
-function [txSig, numOfDataSym]  = OFDMmodulator(data,payloadLength)
+function [txSig, numOfDataSym]  = OFDMmodulator(data,payloadLength,frameNum)
 %input data in cell array
 
 %number of data subcarriers
@@ -61,7 +61,8 @@ rateConverter = dsp.FIRRateConverter('InterpolationFactor', 5,...
 %create waveform
 txSig = [];
 for iPacket = 1 : numOfOPackets
-    config.PSDULength = iPacket;
+    %disp(iPacket + frameNum*10)
+    config.PSDULength = iPacket;% + frameNum*10; %maximum of 10 packets per frame
     SIG = sqrt(sigPow)*wlanLSIG(config);
     SIG = SIG/max(abs(SIG));    
     PPDU = step(H,yPar(:,(iPacket-1)*payloadLength+1:iPacket*payloadLength),pilots);

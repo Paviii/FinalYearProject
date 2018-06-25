@@ -1,17 +1,46 @@
 %% TX
 
 chunkSize = [25 25];
-thresh = 0.01;
-
-payloadLength = 30;
-
+thresh = 0.001;
+numOfCompFrames = 5;
+payloadLength = 200;
 
 %image
-picture = imread('test_data/image.jpg');
-pictureGrayScale = im2double(rgb2gray(picture));
-% figure; subplot(1,4,1); title('original');
-% imshow(pictureGrayScale);
+ picture = imread('test_data/image.jpg');
+ pictureGrayScale = im2double(rgb2gray(picture));
+ metadataBase.picSize = [size(pictureGrayScale,1) size(pictureGrayScale,2)];
+ metadataBase.chunkSize = chunkSize;
+ metadataBase.payloadLength = payloadLength;
+ metadataBase.numOfFrames = 1;
+ metadataBase.numOfCompFrames = numOfCompFrames;
+ save('src/Metadata/metadataBase','metadataBase');
 
+%video
+% if ~exist('vid','var')
+%     importVideoFile('test_data/vid.mp4');
+%     [refFrames,motionVectsCell] =  montionCompensation(vid);
+%     pictureGrayScale = refFrames{1};
+%     
+%     metadataBase.picSize = [size(pictureGrayScale,1) size(pictureGrayScale,2)];
+%     metadataBase.chunkSize = chunkSize;
+%     metadataBase.payloadLength = payloadLength;
+%     metadataBase.numOfFrames = length(refFrames);
+%     metadataBase.numOfCompFrames = numOfCompFrames;
+%     save('src/Metadata/metadataBase','metadataBase');
+% end
+
+load('src/Metadata/matrix.mat','A');
+load('src/Metadata/edges.mat','edges');
+
+%generateRandMatrix(numOfChunks);
+
+videoLen = 1;
+compileIt = 1;
+yCell = cell(videoLen,1);
+for iFrame = 1 : videoLen
+    
+% pictureGrayScale = refFrames{iFrame};
+% motionVectsGroup = motionVectsCell((iFrame-1)*(numOfCompFrames-1) + 1:iFrame*(numOfCompFrames-1));
 
 %do chunks before DFT
 imageChunks = createChunksV2(pictureGrayScale,chunkSize);
@@ -44,33 +73,28 @@ meanMat = zeros(1,numOfVecs);
 varMat = zeros(1,numOfVecs);
 sparsityPattern = cell(numOfVecs,1);
 for i = 1 : numOfVecs
-    meanMat(i) = mean(nonzeros(dctVecSpar(:,i))); %mean of non-zero terms
-    varMat(i) = var(nonzeros(dctVecSpar(:,i))); %variance of non-zero terms
+    nonzeroVec = nonzeros(dctVecSpar(:,i));
+    if isempty(nonzeroVec)
+        nonzeroVec = 0;
+    end
+    meanMat(i) = mean(nonzeroVec); %mean of non-zero terms
+    varMat(i) = var(nonzeroVec); %variance of non-zero terms
     nnzInd = dctVecSpar(:,i) ~= 0;
     sparsityPattern{i} = find(dctVecSpar(:,i) == 0 );
     dctVecSpar(nnzInd,i) = dctVecSpar(nnzInd,i) - meanMat(i);    
 end
 
-%multiple by random matrix
+%video processing
 
-%generate Random matrix, known for tx and rx
-A  = {};
-edges = round([1 numOfChunks*0.2 numOfChunks*0.5 numOfChunks*0.7 numOfChunks]);
-% 20%
-A{1} = (1/sqrt(edges(2)))*randn(edges(2),numOfChunks);
-% 50%
-A{2} = (1/sqrt(edges(3)))*randn(edges(3),numOfChunks);
-% 70%
-A{3} = (1/sqrt(edges(4)))*randn(edges(4),numOfChunks);
-% 100%
-A{4} = (1/sqrt(edges(5)))*randn(edges(5),numOfChunks);
+
+%multiple by random matrix
 
 compSenVec = cell(numOfVecs,1);
 Aind = zeros(1,numOfVecs);
 numOfNonZero = zeros(1,numOfVecs);
 for i = 1: numOfVecs
-    numOfNonZero(i) = nnz(dctVecSpar(:,i));
-    Aind(i) = discretize(nnz(dctVecSpar(:,i)),edges);
+    numOfNonZero(i) = max(nnz(dctVecSpar(:,i)),1);
+    Aind(i) = discretize(numOfNonZero(i),edges);
     Amult = A{Aind(i)};
     compSenVec{i} = Amult*dctVecSpar(:,i);
 end
@@ -98,39 +122,43 @@ powAlocCell = cell(numOfVecs,1);
 g = zeros(numOfVecs,1);
 for i = 1 : numOfVecs
      lambda = varMat(i);
-     g(i) = sqrt((sqrt(lambda*n(i)/gamma) - n(i))/lambda);
+     if lambda == 0
+         g(i) = 0;
+     else
+         g(i) = sqrt(abs(sqrt(lambda*n(i)/gamma) - n(i))/lambda);
+     end
      powAlocCell{i} = g(i)*compSenVec{i};     
 end
 
-%create IQ format with power allocation 
-[y, numOfDataSym] = OFDMmodulator(powAlocCell,payloadLength);
+if iFrame == 119
+    5;
+end
 
+%create IQ format with power allocation 
+[y, numOfDataSym] = OFDMmodulator(powAlocCell,payloadLength,iFrame);
 
 %save metadata
 %metadata sent over reliable channel
-metadata.picSize = [size(picture,1) size(picture,2)];
-metadata.chunkSize = chunkSize;
+
+metadata.dataLength = numOfDataSym;
+metadata.sparsity = numOfNonZero/numOfChunks;
+metadata.Aind = Aind;
 metadata.meanMat = meanMat;
 metadata.varMat = varMat;
+%metadata.motionVectsGroup = motionVectsGroup;
 
-metadata.edges = edges;
-metadata.dataLength = numOfDataSym;
-metadata.payloadLength = payloadLength;
-metadata.sparsity = numOfNonZero/numOfChunks;
+% metadata.y = y;
+% metadata.compSenVec = powAlocCell;
+ metadata.sparsityPattern = sparsityPattern;
+% metadata.g = g;
+% metadata.dctVecSpar = dctVecSpar;
 
-
-
-metadata.Aind = Aind;
-metadata.A = A;
-
-metadata.y = y;
-metadata.compSenVec = powAlocCell;
-metadata.sparsityPattern = sparsityPattern;
-metadata.g = g;
-metadata.dctVecSpar = dctVecSpar;
-
-save('src/Metadata/metadata','metadata');
+save(sprintf('src/Metadata/metadata%d',iFrame),'metadata');
 
 %transmit
-TxWrapper(y);
+yCell{iFrame} = y;
 
+end
+
+
+TxWrapper(yCell{1},compileIt);        

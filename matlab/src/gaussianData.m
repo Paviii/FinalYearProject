@@ -5,8 +5,8 @@ dctVecNorm = randn(chunkSize,numOfVecs);
 
 
 A{1} = randn(700,chunkSize); %(1/sqrt(chunkSize))*
-%SNRvec = [0:50];
-SNRvec = 1000;
+SNRvec = [0:50];
+%SNRvec = 1000;
 eMMSE = zeros(length(SNRvec),1);
 eAMP = zeros(length(SNRvec),1);
 %eAMP2 = zeros(length(SNRvec),1);
@@ -35,8 +35,8 @@ for i = 1 : numOfVecs
     
     
     [a_gb,c_gb,history_gb] = ample(A{1},compSenVecN{1} ,@prior_gb,'prior_params',[gb_mean gb_var sparsity(i)],...
-        'convergence_tolerance',1e-10,...
-        'max_iterations',200,...
+        'convergence_tolerance',1e-5,...
+        'max_iterations',100,...
         'debug',0,...
         'learn_prior_params',0,...
         'learn_delta',0, ...
@@ -50,11 +50,12 @@ for i = 1 : numOfVecs
     
     %AMPv1 = AMPReconstruction2(compSenVecN,A,1,1);
     %AMPv2 = AMPReconstruction(compSenVecN,A,1,1,noiseVar);
+        
     
-    sparsityPattern = find(dctVecSpar == 0 );
+    sparsityPattern{1} = find(dctVecSpar == 0 );
     %[~,idxMin] = sort(abs(a_gb));
     %sparsityPattern = idxMin(1:chunkSize-numOfNonZero(index));
-    estX = MMSEReconstruction(compSenVecN,A,1,1,noiseVar,sparsityPattern);
+    estX = MMSEReconstruction(compSenVecN,1,A,1,var(compSenVecN{1}),1,noiseVar,sparsityPattern);
     %estX = MMSEReconstruction(compSenVecN,A,1,1,noiseVar);
     
     
